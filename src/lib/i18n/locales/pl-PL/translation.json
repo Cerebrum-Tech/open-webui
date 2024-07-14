@@ -413,7 +413,7 @@
 	"Oops! You're using an unsupported method (frontend only). Please serve the WebUI from the backend.": "Ups! Używasz nieobsługiwanej metody (tylko interfejs front-end). Proszę obsłużyć interfejs WebUI z poziomu backendu.",
 	"Open AI (Dall-E)": "Open AI (Dall-E)",
 	"Open new chat": "Otwórz nowy czat",
-	"Open WebUI version (v{{OPEN_WEBUI_VERSION}}) is lower than required version (v{{REQUIRED_VERSION}})": "",
+	"Cerebrum LLM UI version (v{{OPEN_WEBUI_VERSION}}) is lower than required version (v{{REQUIRED_VERSION}})": "",
 	"OpenAI": "OpenAI",
 	"OpenAI API": "OpenAI API",
 	"OpenAI API Config": "Konfiguracja OpenAI API",

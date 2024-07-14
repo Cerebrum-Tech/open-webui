@@ -177,7 +177,7 @@ async def post_streaming_url(url: str, payload: str, stream: bool = True):
             return res
 
     except Exception as e:
-        error_detail = "Open WebUI: Server Connection Error"
+        error_detail = "Cerebrum LLM UI: Server Connection Error"
         if r is not None:
             try:
                 res = await r.json()
@@ -317,7 +317,7 @@ async def get_ollama_versions(url_idx: Optional[int] = None):
                 return r.json()
             except Exception as e:
                 log.exception(e)
-                error_detail = "Open WebUI: Server Connection Error"
+                error_detail = "Cerebrum LLM UI: Server Connection Error"
                 if r is not None:
                     try:
                         res = r.json()

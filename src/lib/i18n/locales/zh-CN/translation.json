@@ -413,7 +413,7 @@
 	"Oops! You're using an unsupported method (frontend only). Please serve the WebUI from the backend.": "糟糕！你正在使用不被支持的方法（仅前端）。请从后端提供 WebUI 服务。",
 	"Open AI (Dall-E)": "Open AI (Dall-E)",
 	"Open new chat": "打开新对话",
-	"Open WebUI version (v{{OPEN_WEBUI_VERSION}}) is lower than required version (v{{REQUIRED_VERSION}})": "当前 Open WebUI 版本 (v{{OPEN_WEBUI_VERSION}}) 低于所需的版本 (v{{REQUIRED_VERSION}})",
+	"Cerebrum LLM UI version (v{{OPEN_WEBUI_VERSION}}) is lower than required version (v{{REQUIRED_VERSION}})": "当前 Cerebrum LLM UI 版本 (v{{OPEN_WEBUI_VERSION}}) 低于所需的版本 (v{{REQUIRED_VERSION}})",
 	"OpenAI": "OpenAI",
 	"OpenAI API": "OpenAI API",
 	"OpenAI API Config": "OpenAI API 配置",

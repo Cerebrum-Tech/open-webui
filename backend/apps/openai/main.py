@@ -492,7 +492,7 @@ async def generate_chat_completion(
             return response_data
     except Exception as e:
         log.exception(e)
-        error_detail = "Open WebUI: Server Connection Error"
+        error_detail = "Cerebrum LLM UI: Server Connection Error"
         if r is not None:
             try:
                 res = await r.json()

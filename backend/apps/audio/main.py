@@ -352,7 +352,7 @@ def transcribe(
                 return data
             except Exception as e:
                 log.exception(e)
-                error_detail = "Open WebUI: Server Connection Error"
+                error_detail = "Cerebrum LLM UI: Server Connection Error"
                 if r is not None:
                     try:
                         res = r.json()
