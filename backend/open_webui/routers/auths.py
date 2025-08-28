@@ -173,6 +173,24 @@ async def update_password(
 ############################
 # LDAP Authentication
 ############################
+
+def parse_ldap_username(user_input: str) -> str:
+    """
+    Parse user input and extract username from email if provided.
+    If the input contains '@', extract the part before '@' as the username.
+    Otherwise, return the input as-is.
+    
+    Args:
+        user_input: The user input (could be username or email)
+        
+    Returns:
+        The username part (without domain if email was provided)
+    """
+    if '@' in user_input:
+        return user_input.split('@')[0]
+    return user_input
+
+
 @router.post("/ldap", response_model=SessionUserResponse)
 async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
     ENABLE_LDAP = request.app.state.config.ENABLE_LDAP
@@ -226,8 +244,10 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
             authentication="SIMPLE" if LDAP_APP_DN else "ANONYMOUS",
         )
         if not connection_app.bind():
-            raise HTTPException(400, detail="Application account bind failed")
-
+            raise HTTPException(
+                400,
+                detail=f"Application account bind failed, result:{connection_app.result}, last error:{connection_app.last_error}",
+            )
         ENABLE_LDAP_GROUP_MANAGEMENT = (
             request.app.state.config.ENABLE_LDAP_GROUP_MANAGEMENT
         )
@@ -248,9 +268,13 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
 
         log.info(f"LDAP search attributes: {search_attributes}")
 
+        # Parse the user input to extract username from email if provided
+        parsed_username = parse_ldap_username(form_data.user.lower())
+        log.info(f"LDAP parsed username: {parsed_username} (from input: {form_data.user})")
+
         search_success = connection_app.search(
             search_base=LDAP_SEARCH_BASE,
-            search_filter=f"(&({LDAP_ATTRIBUTE_FOR_USERNAME}={escape_filter_chars(form_data.user.lower())}){LDAP_SEARCH_FILTERS})",
+            search_filter=f"(&({LDAP_ATTRIBUTE_FOR_USERNAME}={escape_filter_chars(parsed_username)}){LDAP_SEARCH_FILTERS})",
             attributes=search_attributes,
         )
 
@@ -337,7 +361,7 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
                 f"LDAP Group Management enabled but {LDAP_ATTRIBUTE_FOR_GROUPS} attribute not found in user entry"
             )
 
-        if username == form_data.user.lower():
+        if username == parsed_username:
             connection_user = Connection(
                 server,
                 user_dn,
