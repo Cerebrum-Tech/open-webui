@@ -498,14 +498,14 @@
 {/if}
 
 {#if !$config?.license_metadata}
-	{#if total > 50}
+	{#if total > 100000}
 		<div class="text-sm">
 			<Markdown
 				content={`
 > [!NOTE]
 > # **Hey there! 👋**
 >
-> It looks like you have over 50 users — that usually falls under organizational usage.
+> It looks like you have over 100000 users — that usually falls under organizational usage.
 > 
 > Open WebUI is proudly open source and completely free, with no hidden limits — and we'd love to keep it that way. 🌱  
 >
