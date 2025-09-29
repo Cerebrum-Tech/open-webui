@@ -26,8 +26,8 @@ services:
       - 'WEBUI_SECRET_KEY='
       - VIRTUAL_HOST=llm.cereinsight.com
       - CERT_NAME=cereinsight.com
-      - WEBUI_NAME=Cere LLM WebUI
-      - CUSTOM_NAME=Cere LLM WebUI
+      - WEBUI_NAME=T.C. Sanayi ve Teknoloji Bakanlığı Yapay Zekâ Servisi
+      - CUSTOM_NAME=T.C. Sanayi ve Teknoloji Bakanlığı Yapay Zekâ Servisi
     restart: unless-stopped
     extra_hosts:
       - host.docker.internal:host-gateway
