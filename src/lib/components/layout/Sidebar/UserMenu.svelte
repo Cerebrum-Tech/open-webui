@@ -6,8 +6,7 @@
 	import { goto } from '$app/navigation';
 	import { fade, slide } from 'svelte/transition';
 
-	import { getUsage } from '$lib/apis';
-	import { userSignOut } from '$lib/apis/auths';
+    import { getUsage } from '$lib/apis';
 
 	import { showSettings, mobile, showSidebar, showShortcuts, user } from '$lib/stores';
 
@@ -19,8 +18,7 @@
 	import ShortcutsModal from '$lib/components/chat/ShortcutsModal.svelte';
 	import Settings from '$lib/components/icons/Settings.svelte';
 	import Code from '$lib/components/icons/Code.svelte';
-	import UserGroup from '$lib/components/icons/UserGroup.svelte';
-	import SignOut from '$lib/components/icons/SignOut.svelte';
+    import UserGroup from '$lib/components/icons/UserGroup.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -180,24 +178,7 @@
 				</DropdownMenu.Item>
 			{/if}
 
-			<hr class=" border-gray-100 dark:border-gray-800 my-1 p-0" />
-
-			<DropdownMenu.Item
-				class="flex rounded-md py-1.5 px-3 w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition"
-				on:click={async () => {
-					const res = await userSignOut();
-					user.set(null);
-					localStorage.removeItem('token');
-
-					location.href = res?.redirect_url ?? '/auth';
-					show = false;
-				}}
-			>
-				<div class=" self-center mr-3">
-					<SignOut className="w-5 h-5" strokeWidth="1.5" />
-				</div>
-				<div class=" self-center truncate">{$i18n.t('Sign Out')}</div>
-			</DropdownMenu.Item>
+            
 
 			{#if usage}
 				{#if usage?.user_ids?.length > 0}

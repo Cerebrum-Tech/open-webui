@@ -10,6 +10,7 @@
 
 	import { getBackendConfig } from '$lib/apis';
 	import { ldapUserSignIn, getSessionUser, userSignIn, userSignUp } from '$lib/apis/auths';
+	import { tryStbAiAutoAuth } from '$lib/apis/stb-ai';
 
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 	import { WEBUI_NAME, config, user, socket } from '$lib/stores';
@@ -40,15 +41,30 @@
 	const setSessionUser = async (sessionUser) => {
 		if (sessionUser) {
 			console.log(sessionUser);
+			console.log('Setting session user with token:', sessionUser.token ? 'present' : 'missing');
 			toast.success($i18n.t(`You're now logged in.`));
+			
 			if (sessionUser.token) {
 				localStorage.token = sessionUser.token;
 			}
-			$socket.emit('user-join', { auth: { token: sessionUser.token } });
+			
+			// Set user and config FIRST
 			await user.set(sessionUser);
+			console.log('User set in store');
+			
 			await config.set(await getBackendConfig());
-
+			console.log('Config loaded');
+			
+			// Wait a moment to ensure cookie/token is properly propagated
+			// This prevents 401 errors on subsequent API calls
+			await new Promise(resolve => setTimeout(resolve, 150));
+			console.log('Token propagation delay complete');
+			
+			// Now emit socket event and redirect
+			$socket.emit('user-join', { auth: { token: sessionUser.token } });
+			
 			const redirectPath = querystringValue('redirect') || '/';
+			console.log('Redirecting to:', redirectPath);
 			goto(redirectPath);
 		}
 	};
@@ -146,6 +162,19 @@
 			goto(redirectPath);
 		}
 		await checkOauthCallback();
+
+		// Check for STB-AI authentication
+		try {
+			const stbAiResult = await tryStbAiAutoAuth();
+			if (stbAiResult.success) {
+				console.log('STB-AI authentication successful');
+				await setSessionUser(stbAiResult.user);
+				return; // Exit early if STB-AI auth is successful
+			}
+		} catch (error) {
+			console.log('STB-AI authentication not available or failed:', error);
+			// Continue with normal authentication flow
+		}
 
 		loaded = true;
 		setLogoImage();

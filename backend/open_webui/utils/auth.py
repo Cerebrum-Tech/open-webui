@@ -175,6 +175,67 @@ def get_current_user(
 
     if token is None and "token" in request.cookies:
         token = request.cookies.get("token")
+    
+    # Check for STB-AI authentication if no token
+    if token is None and "STB-AI" in request.cookies:
+        from open_webui.utils.stb_ai_auth import stb_ai_auth_service
+        from open_webui.utils.misc import parse_duration
+        from open_webui.models.auths import Auths  # Import here to avoid circular dependency
+        import time
+        import uuid
+        
+        # Try STB-AI authentication
+        auth_result = stb_ai_auth_service.validate_stb_ai_user(request)
+        
+        if auth_result and auth_result.get("status") is True:
+            # Extract user information
+            username = auth_result.get("username", "").lower()
+            full_name = auth_result.get("full_name", username)
+            email = f"{username}@sanayi.gov.tr"
+            
+            # Check if user exists
+            user = Users.get_user_by_email(email)
+            
+            if not user:
+                # Auto-register the user
+                user_count = Users.get_num_users()
+                role = "admin" if user_count == 0 else "user"
+                
+                # Create user with random password
+                hashed_password = get_password_hash(str(uuid.uuid4()))
+                user = Auths.insert_new_auth(
+                    email=email,
+                    password=hashed_password,
+                    name=full_name,
+                    profile_image_url="/user.png",
+                    role=role
+                )
+            
+            if user:
+                # Create a temporary token for this request
+                expires_delta = parse_duration("720m")  # 12 hours
+                if expires_delta is None:
+                    from datetime import timedelta as _td
+                    expires_delta = _td(hours=12)
+
+                expires_at = int(time.time()) + int(expires_delta.total_seconds())
+
+                # Use create_token with proper expires_delta
+                token = create_token(
+                    data={"id": user.id},
+                    expires_delta=expires_delta,
+                )
+
+                # Set the token cookie
+                if response:
+                    response.set_cookie(
+                        key="token",
+                        value=token,
+                        expires=datetime.fromtimestamp(expires_at, UTC),
+                        httponly=True,
+                        samesite="lax",
+                        secure=False,  # Set to True in production with HTTPS
+                    )
 
     if token is None:
         raise HTTPException(status_code=403, detail="Not authenticated")

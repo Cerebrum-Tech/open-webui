@@ -50,6 +50,7 @@ from open_webui.utils.auth import (
 )
 from open_webui.utils.webhook import post_webhook
 from open_webui.utils.access_control import get_permissions
+from open_webui.utils.stb_ai_auth import stb_ai_auth_service
 
 from typing import Optional, List
 
@@ -470,6 +471,199 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
     except Exception as e:
         log.error(f"LDAP authentication error: {str(e)}")
         raise HTTPException(400, detail="LDAP authentication failed.")
+
+
+############################
+# STB-AI Authentication
+############################
+
+
+@router.post("/stb-ai/auth", response_model=SessionUserResponse)
+async def stb_ai_auth(request: Request, response: Response):
+    """
+    Authenticate user using STB-AI cookie
+    This endpoint checks for STB-AI cookie and validates it with intranet.sanayi.gov.tr API
+    """
+    log.info("=" * 70)
+    log.info("STB-AI AUTH ENDPOINT CALLED")
+    log.info("=" * 70)
+    log.info(f"Client IP: {request.client.host if request.client else 'Unknown'}")
+    log.info(f"User-Agent: {request.headers.get('user-agent', 'Unknown')}")
+    log.info(f"All cookies received: {list(request.cookies.keys())}")
+    
+    # Get STB-AI cookie and validate
+    auth_result = stb_ai_auth_service.validate_stb_ai_user(request)
+    
+    if not auth_result or auth_result.get("status") is not True:
+        log.error("STB-AI authentication failed or cookie not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=auth_result.get("message", "STB-AI authentication failed") if auth_result else "STB-AI cookie not found"
+        )
+    
+    # Extract user information
+    username = auth_result.get("username", "").strip().lower()  # Windows username is unique
+    full_name = auth_result.get("full_name", "").strip()
+    
+    # Validate username is not empty
+    if not username:
+        log.error("Username is empty after extraction!")
+        log.error(f"Auth result: {auth_result}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Invalid user data: username is required"
+        )
+    
+    email = f"{username}@sanayi.gov.tr"  # Create email from username
+    
+    log.info(f"Processing authentication for user:")
+    log.info(f"  Username: {username}")
+    log.info(f"  Full Name: {full_name}")
+    log.info(f"  Email (generated): {email}")
+    log.info(f"  Unit ID: {auth_result.get('unit_id', 'N/A')}")
+    log.info(f"  Unit Name: {auth_result.get('unit_name', 'N/A')}")
+    
+    # Check if user exists, if not create one
+    log.info(f"Checking if user exists with email: {email}")
+    user = Users.get_user_by_email(email)
+    
+    if not user:
+        # Auto-register the user
+        log.info(f"User not found - Auto-registering new STB-AI user")
+        
+        # Determine role based on configuration
+        user_count = Users.get_num_users()
+        role = "admin" if user_count == 0 else request.app.state.config.DEFAULT_USER_ROLE
+        
+        log.info(f"User count: {user_count}")
+        log.info(f"Assigned role: {role}")
+        
+        # Create user with random password (they won't need it for STB-AI auth)
+        hashed_password = get_password_hash(str(uuid.uuid4()))
+        log.info(f"Creating new user account...")
+        user = Auths.insert_new_auth(
+            email=email,
+            password=hashed_password,
+            name=full_name,
+            profile_image_url="/user.png",
+            role=role
+        )
+        
+        if not user:
+            log.error("Failed to create user account in database")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create user account"
+            )
+        
+        log.info(f"User account created successfully with ID: {user.id}")
+    else:
+        log.info(f"User found in database with ID: {user.id}")
+        # Update user's name if it has changed
+        if user.name != full_name:
+            log.info(f"Updating user name from '{user.name}' to '{full_name}'")
+            Users.update_user_by_id(user.id, {"name": full_name})
+        else:
+            log.info(f"User name unchanged: {full_name}")
+    
+    # Create session token
+    log.info("Creating session token...")
+    expires_delta = parse_duration(request.app.state.config.JWT_EXPIRES_IN)
+    # Fallback to 12 hours if not configured
+    if not expires_delta:
+        import datetime as _dt
+        expires_delta = _dt.timedelta(hours=12)
+        log.info("JWT_EXPIRES_IN not set; defaulting to 12h")
+
+    expires_at = int(time.time()) + int(expires_delta.total_seconds())
+    log.info(f"Token will expire in {expires_delta} at timestamp {expires_at}")
+
+    # Use create_token's expires_delta handling (adds a valid 'exp' claim)
+    token = create_token(
+        data={"id": user.id},
+        expires_delta=expires_delta,
+    )
+    log.info(f"Token created (first 20 chars): {token[:20]}...")
+    
+    # Set cookie
+    log.info("Setting authentication cookie...")
+    response.set_cookie(
+        key="token",
+        value=token,
+        expires=datetime.datetime.fromtimestamp(expires_at, datetime.timezone.utc),
+        httponly=True,
+        samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
+        secure=WEBUI_AUTH_COOKIE_SECURE,
+    )
+    
+    # Get user permissions
+    user_permissions = get_permissions(
+        user.id, request.app.state.config.USER_PERMISSIONS
+    )
+    log.info(f"User permissions: {list(user_permissions.keys()) if user_permissions else 'None'}")
+    
+    # Store unit information in user's metadata (optional)
+    unit_info = {
+        "unit_id": auth_result.get("unit_id"),
+        "unit_name": auth_result.get("unit_name")
+    }
+    log.info(f"Unit information: {unit_info}")
+    
+    # You can store this in user's metadata if needed
+    # Users.update_user_by_id(user.id, {"metadata": unit_info})
+    
+    log.info("=" * 70)
+    log.info("STB-AI AUTHENTICATION SUCCESSFUL - Returning session data")
+    log.info(f"User ID: {user.id}")
+    log.info(f"User Email: {user.email}")
+    log.info(f"User Name: {user.name}")
+    log.info(f"User Role: {user.role}")
+    log.info("=" * 70)
+    
+    return {
+        "token": token,
+        "token_type": "Bearer",
+        "expires_at": expires_at,
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "role": user.role,
+        "profile_image_url": user.profile_image_url,
+        "permissions": user_permissions,
+    }
+
+
+@router.get("/stb-ai/check")
+async def check_stb_ai_cookie(request: Request):
+    """
+    Check if STB-AI cookie is present and valid
+    """
+    log.info("=" * 70)
+    log.info("STB-AI CHECK ENDPOINT CALLED")
+    log.info("=" * 70)
+    log.info(f"Client IP: {request.client.host if request.client else 'Unknown'}")
+    
+    auth_result = stb_ai_auth_service.validate_stb_ai_user(request)
+    
+    if auth_result and auth_result.get("status") is True:
+        log.info("STB-AI check: User is authenticated")
+        log.info(f"Username: {auth_result.get('username')}")
+        return {
+            "authenticated": True,
+            "user_info": {
+                "full_name": auth_result.get("full_name"),
+                "username": auth_result.get("username"),
+                "unit_name": auth_result.get("unit_name")
+            }
+        }
+    else:
+        log.info("STB-AI check: User is NOT authenticated")
+        message = auth_result.get("message") if auth_result else "No STB-AI cookie found"
+        log.info(f"Reason: {message}")
+        return {
+            "authenticated": False,
+            "message": message
+        }
 
 
 ############################
