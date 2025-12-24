@@ -11,6 +11,9 @@ export const WEBUI_NAME = writable(APP_NAME);
 export const config: Writable<Config | undefined> = writable(undefined);
 export const user: Writable<SessionUser | undefined> = writable(undefined);
 
+// EULA Modal
+export const showEulaModal = writable(false);
+
 // Electron App
 export const isApp = writable(false);
 export const appInfo = writable(null);

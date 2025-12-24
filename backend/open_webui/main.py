@@ -61,6 +61,7 @@ from open_webui.socket.main import (
     get_active_user_ids,
 )
 from open_webui.routers import (
+    agreements,
     audio,
     images,
     ollama,
@@ -1217,6 +1218,9 @@ app.include_router(
     evaluations.router, prefix="/api/v1/evaluations", tags=["evaluations"]
 )
 app.include_router(utils.router, prefix="/api/v1/utils", tags=["utils"])
+app.include_router(
+    agreements.router, prefix="/api/v1/agreements", tags=["agreements"]
+)
 
 
 try:

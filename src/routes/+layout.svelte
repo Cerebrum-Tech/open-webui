@@ -25,7 +25,8 @@
 		isApp,
 		appInfo,
 		toolServers,
-		playingNotificationSound
+		playingNotificationSound,
+		showEulaModal
 	} from '$lib/stores';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -45,7 +46,9 @@
 	import { getAllTags, getChatList } from '$lib/apis/chats';
 	import NotificationToast from '$lib/components/NotificationToast.svelte';
 	import AppSidebar from '$lib/components/app/AppSidebar.svelte';
+	import EulaModal from '$lib/components/EulaModal.svelte';
 	import { chatCompletion } from '$lib/apis/openai';
+	import { getAgreementStatus } from '$lib/apis/agreements';
 
 	import { beforeNavigate } from '$app/navigation';
 	import { updated } from '$app/state';
@@ -590,6 +593,29 @@
 					if (sessionUser) {
 						await user.set(sessionUser);
 						await config.set(await getBackendConfig());
+						
+						// Check if user needs to accept EULA - ALWAYS check for all users
+						try {
+							const agreementStatus = await getAgreementStatus(localStorage.token);
+							console.log('Agreement status for user:', sessionUser.email, agreementStatus);
+							
+							// Show EULA modal if:
+							// 1. needs_acceptance is true
+							// 2. eula_accepted is false
+							// 3. agreementStatus is null/undefined (API error)
+							if (!agreementStatus || agreementStatus.needs_acceptance || !agreementStatus.eula_accepted) {
+								console.log('User needs to accept EULA, showing modal');
+								$showEulaModal = true;
+							} else {
+								console.log('User has already accepted EULA');
+								$showEulaModal = false;
+							}
+						} catch (error) {
+							console.error('Error checking agreement status:', error);
+							// If there's an error checking (e.g., table doesn't exist), show the modal to be safe
+							console.log('Error occurred, showing EULA modal as fallback');
+							$showEulaModal = true;
+						}
 					} else {
 						// Redirect Invalid Session User to /auth Page
 						localStorage.removeItem('token');
@@ -657,6 +683,17 @@
 </svelte:head>
 
 {#if loaded}
+	<!-- EULA Modal - must be accepted before using the app -->
+	{#if $showEulaModal}
+		<EulaModal 
+			show={true}
+			token={localStorage?.token || ''}
+			on:accepted={() => {
+				$showEulaModal = false;
+			}}
+		/>
+	{/if}
+
 	{#if $isApp}
 		<div class="flex flex-row h-screen">
 			<AppSidebar />

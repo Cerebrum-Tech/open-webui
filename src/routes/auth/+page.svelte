@@ -10,10 +10,11 @@
 
 	import { getBackendConfig } from '$lib/apis';
 	import { ldapUserSignIn, getSessionUser, userSignIn, userSignUp } from '$lib/apis/auths';
+	import { getAgreementStatus } from '$lib/apis/agreements';
 	import { tryStbAiAutoAuth } from '$lib/apis/stb-ai';
 
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
-	import { WEBUI_NAME, config, user, socket } from '$lib/stores';
+	import { WEBUI_NAME, config, user, socket, showEulaModal } from '$lib/stores';
 
 	import { generateInitialsImage, canvasPixelTest } from '$lib/utils';
 
@@ -59,6 +60,24 @@
 			// This prevents 401 errors on subsequent API calls
 			await new Promise(resolve => setTimeout(resolve, 150));
 			console.log('Token propagation delay complete');
+			
+			// Check EULA acceptance status BEFORE redirecting
+			try {
+				const agreementStatus = await getAgreementStatus(localStorage.token);
+				console.log('[AUTH] Agreement status after login:', agreementStatus);
+				
+				if (!agreementStatus || agreementStatus.needs_acceptance || !agreementStatus.eula_accepted) {
+					console.log('[AUTH] User needs to accept EULA, setting showEulaModal to true');
+					showEulaModal.set(true);
+				} else {
+					console.log('[AUTH] User has already accepted EULA');
+					showEulaModal.set(false);
+				}
+			} catch (error) {
+				console.error('[AUTH] Error checking agreement status:', error);
+				// If there's an error, show the modal to be safe
+				showEulaModal.set(true);
+			}
 			
 			// Now emit socket event and redirect
 			$socket.emit('user-join', { auth: { token: sessionUser.token } });
@@ -542,6 +561,18 @@
 						{/if}
 					</div>
 				{/if}
+			</div>
+		</div>
+		
+		<!-- Privacy Notice Link - Must be accessible before login per KVKK -->
+		<div class="fixed bottom-4 left-0 right-0 z-50">
+			<div class="text-center">
+				<a 
+					href="/privacy-notice"
+					class="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:underline transition-colors"
+				>
+					{$i18n.t('Privacy Notice')} (Aydınlatma Metni)
+				</a>
 			</div>
 		</div>
 	{/if}
