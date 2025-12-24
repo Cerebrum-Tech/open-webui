@@ -15,6 +15,10 @@ ARG USE_RERANKING_MODEL=""
 # Tiktoken encoding name; models to use can be found at https://huggingface.co/models?library=tiktoken
 ARG USE_TIKTOKEN_ENCODING_NAME="cl100k_base"
 
+# Whisper model for speech-to-text (base, small, medium, large-v3, etc.)
+# Models are downloaded and embedded during build for offline/air-gapped use
+ARG USE_WHISPER_MODEL=large-v3
+
 ARG BUILD_HASH=dev-build
 # Override at your own risk - non-root configurations are untested
 ARG UID=0
@@ -45,6 +49,7 @@ ARG USE_OLLAMA
 ARG USE_CUDA_VER
 ARG USE_EMBEDDING_MODEL
 ARG USE_RERANKING_MODEL
+ARG USE_WHISPER_MODEL
 ARG UID
 ARG GID
 
@@ -70,9 +75,11 @@ ENV OPENAI_API_KEY="" \
     ANONYMIZED_TELEMETRY=false
 
 #### Other models #########################################################
-## whisper TTS model settings ##
-ENV WHISPER_MODEL="base" \
-    WHISPER_MODEL_DIR="/app/backend/data/cache/whisper/models"
+## whisper STT model settings ##
+## Note: WHISPER_MODEL_DIR is placed outside /app/backend/data/ to avoid being overwritten by volume mounts
+## Model is downloaded during build and embedded in the image for offline use
+ENV WHISPER_MODEL="$USE_WHISPER_MODEL" \
+    WHISPER_MODEL_DIR="/app/backend/static/whisper/models"
 
 ## RAG Embedding model settings ##
 ENV RAG_EMBEDDING_MODEL="$USE_EMBEDDING_MODEL_DOCKER" \
@@ -104,6 +111,9 @@ RUN if [ $UID -ne 0 ]; then \
 
 RUN mkdir -p $HOME/.cache/chroma
 RUN echo -n 00000000-0000-0000-0000-000000000000 > $HOME/.cache/chroma/telemetry_user_id
+
+# Create whisper model directory (outside /app/backend/data to avoid volume mount issues)
+RUN mkdir -p /app/backend/static/whisper/models
 
 # Make sure the user has access to the app and root directory
 RUN chown -R $UID:$GID /app $HOME
@@ -137,20 +147,23 @@ COPY --chown=$UID:$GID ./backend/requirements.txt ./requirements.txt
 
 RUN pip3 install --no-cache-dir uv && \
     if [ "$USE_CUDA" = "true" ]; then \
-    # If you use CUDA the whisper and embedding model will be downloaded on first use
     pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/$USE_CUDA_DOCKER_VER --no-cache-dir && \
-    uv pip install --system -r requirements.txt --no-cache-dir && \
-    python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ['RAG_EMBEDDING_MODEL'], device='cpu')" && \
-    python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ['WHISPER_MODEL'], device='cpu', compute_type='int8', download_root=os.environ['WHISPER_MODEL_DIR'])"; \
-    python -c "import os; import tiktoken; tiktoken.get_encoding(os.environ['TIKTOKEN_ENCODING_NAME'])"; \
+    uv pip install --system -r requirements.txt --no-cache-dir; \
     else \
     pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --no-cache-dir && \
-    uv pip install --system -r requirements.txt --no-cache-dir && \
+    uv pip install --system -r requirements.txt --no-cache-dir; \
+    fi
+
+# Download and embed models during build for offline/air-gapped use
+RUN echo ">>> Downloading embedding model: ${RAG_EMBEDDING_MODEL}" && \
     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ['RAG_EMBEDDING_MODEL'], device='cpu')" && \
-    python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ['WHISPER_MODEL'], device='cpu', compute_type='int8', download_root=os.environ['WHISPER_MODEL_DIR'])"; \
-    python -c "import os; import tiktoken; tiktoken.get_encoding(os.environ['TIKTOKEN_ENCODING_NAME'])"; \
-    fi; \
-    chown -R $UID:$GID /app/backend/data/
+    echo ">>> Downloading Whisper STT model: ${WHISPER_MODEL} to ${WHISPER_MODEL_DIR}" && \
+    python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ['WHISPER_MODEL'], device='cpu', compute_type='int8', download_root=os.environ['WHISPER_MODEL_DIR'])" && \
+    echo ">>> Downloading tiktoken encoding: ${TIKTOKEN_ENCODING_NAME}" && \
+    python -c "import os; import tiktoken; tiktoken.get_encoding(os.environ['TIKTOKEN_ENCODING_NAME'])" && \
+    echo ">>> Model downloads complete!" && \
+    ls -la ${WHISPER_MODEL_DIR} && \
+    chown -R $UID:$GID /app/backend/data/ /app/backend/static/
 
 
 
