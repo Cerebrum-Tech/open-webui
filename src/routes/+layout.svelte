@@ -594,27 +594,37 @@
 						await user.set(sessionUser);
 						await config.set(await getBackendConfig());
 						
-						// Check if user needs to accept EULA - ALWAYS check for all users
-						try {
-							const agreementStatus = await getAgreementStatus(localStorage.token);
-							console.log('Agreement status for user:', sessionUser.email, agreementStatus);
-							
-							// Show EULA modal if:
-							// 1. needs_acceptance is true
-							// 2. eula_accepted is false
-							// 3. agreementStatus is null/undefined (API error)
-							if (!agreementStatus || agreementStatus.needs_acceptance || !agreementStatus.eula_accepted) {
-								console.log('User needs to accept EULA, showing modal');
+						// Skip EULA check on privacy-notice and terms-of-use pages
+						const currentPath = $page.url.pathname;
+						const exemptPaths = ['/privacy-notice', '/terms-of-use'];
+						const isExemptPath = exemptPaths.some(path => currentPath.startsWith(path));
+						
+						if (isExemptPath) {
+							console.log('Skipping EULA check on exempt path:', currentPath);
+							$showEulaModal = false;
+						} else {
+							// Check if user needs to accept EULA - ALWAYS check for all users
+							try {
+								const agreementStatus = await getAgreementStatus(localStorage.token);
+								console.log('Agreement status for user:', sessionUser.email, agreementStatus);
+								
+								// Show EULA modal if:
+								// 1. needs_acceptance is true
+								// 2. eula_accepted is false
+								// 3. agreementStatus is null/undefined (API error)
+								if (!agreementStatus || agreementStatus.needs_acceptance || !agreementStatus.eula_accepted) {
+									console.log('User needs to accept EULA, showing modal');
+									$showEulaModal = true;
+								} else {
+									console.log('User has already accepted EULA');
+									$showEulaModal = false;
+								}
+							} catch (error) {
+								console.error('Error checking agreement status:', error);
+								// If there's an error checking (e.g., table doesn't exist), show the modal to be safe
+								console.log('Error occurred, showing EULA modal as fallback');
 								$showEulaModal = true;
-							} else {
-								console.log('User has already accepted EULA');
-								$showEulaModal = false;
 							}
-						} catch (error) {
-							console.error('Error checking agreement status:', error);
-							// If there's an error checking (e.g., table doesn't exist), show the modal to be safe
-							console.log('Error occurred, showing EULA modal as fallback');
-							$showEulaModal = true;
 						}
 					} else {
 						// Redirect Invalid Session User to /auth Page
